@@ -1,0 +1,66 @@
+# ---------------------------------------------------
+# Python & Virtual Environments
+# ---------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.gemini/
+
+# ---------------------------------------------------
+# Environment Variables (Security)
+# ---------------------------------------------------
+.env
+
+# ---------------------------------------------------
+# Database & Vector Stores
+# ---------------------------------------------------
+backend/chroma_data/
+*.sqlite3
+
+# ---------------------------------------------------
+# Machine Learning & Data Files
+# ---------------------------------------------------
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Large data files (CSVs)
+train/*.csv
+
+# Serialized ML models (pkl, json weights)
+train/*.pkl
+train/*.json
+
+# Generated plots/visualizations
+train/*.png
+
+# ---------------------------------------------------
+# XGBoost Model Weights (too large for Git)
+# ---------------------------------------------------
+# These are ~15MB each; document how to retrain instead
+train/ranker.json
+train/xgboost_ranker_v2.json
+
+# ---------------------------------------------------
+# OS Generated Files
+# ---------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------
+# IDE / Editor
+# ---------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------
+# Logs & Caches
+# ---------------------------------------------------
+*.log
+.pytest_cache/
+.ruff_cache/
