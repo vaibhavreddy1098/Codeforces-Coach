@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Response
+﻿from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ app.add_middleware(
 init_db()
 
 
-# ── Request models ───────────────────────────────────────────────────
+# â”€â”€ Request models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class RegisterRequest(BaseModel):
     cf_handle: str
@@ -53,7 +53,7 @@ class SearchRequest(BaseModel):
     query: str
 
 
-# ── Auth endpoints ───────────────────────────────────────────────────
+# â”€â”€ Auth endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.post("/api/register")
 def register(req: RegisterRequest, response: Response):
@@ -116,7 +116,7 @@ def me(request: Request):
     return {"cf_handle": user["handle"]}
 
 
-# ── Core endpoints (now session-aware) ───────────────────────────────
+# â”€â”€ Core endpoints (now session-aware) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _resolve_handle(req: ProfileRequest, request: Request) -> str:
     """Return the handle from request body or fall back to session."""
@@ -224,7 +224,7 @@ def api_search_problems(req: SearchRequest, request: Request):
     return res
 
 
-# ── History endpoints ────────────────────────────────────────────────
+# â”€â”€ History endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.get("/api/history")
 def get_history(request: Request):
@@ -294,7 +294,7 @@ def delete_history(item_id: int, request: Request):
         db.close()
 
 
-# ── Leaderboard endpoint ────────────────────────────────────────────
+# â”€â”€ Leaderboard endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.get("/api/leaderboard")
 def get_leaderboard(request: Request, search: Optional[str] = None):
@@ -380,9 +380,13 @@ def get_leaderboard(request: Request, search: Optional[str] = None):
         db.close()
 
 
-# ── Static files (must be last) ─────────────────────────────────────
+# â”€â”€ Static files (must be last) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+
+# API service entrypoints for Codeforces Coach
+
