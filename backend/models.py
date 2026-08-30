@@ -7,7 +7,6 @@ from sqlalchemy import (
     String,
     Text,
     Float,
-    ARRAY,
     DateTime,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -15,7 +14,13 @@ from sqlalchemy.sql import func
 
 from config import DATABASE_URL
 
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+# SQLite requires special handling for array-like data
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
@@ -33,7 +38,7 @@ class Problem(Base):
     index = Column(String(5), nullable=False)            # e.g. "A", "B1"
     name = Column(String(256), nullable=False)
     rating = Column(Integer, nullable=True)              # can be unrated
-    tags = Column(ARRAY(String), nullable=True)          # ['math', 'greedy', ...]
+    tags = Column(Text, nullable=True)          # Store as JSON/comma-separated string
     solved_count = Column(Integer, nullable=True)        # from problemStatistics
     description_text = Column(Text, nullable=True)       # generated text for embedding
 

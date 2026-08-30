@@ -22,8 +22,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure DB tables exist on startup
-init_db()
+# Defer DB initialization to avoid startup errors
+_db_initialized = False
+
+@app.on_event("startup")
+def startup_event():
+    global _db_initialized
+    try:
+        init_db()
+        _db_initialized = True
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization warning: {e}")
+        # Continue anyway - tables might already exist or DB may be initialized on first use
 
 
 # ── Request models ───────────────────────────────────────────────────

@@ -5,15 +5,25 @@ import pandas as pd
 import xgboost as xgb
 from google import genai
 from google.genai import types
-import chromadb
-from chromadb.utils import embedding_functions
-from config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, EMBEDDING_MODEL
 from pathlib import Path
 from models import SessionLocal, ProblemEditorial
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 
+# Defer expensive imports
 cross_encoder_model = None
+collection = None
+chroma_client_instance = None
+
+def get_chroma_client():
+    global chroma_client_instance
+    if chroma_client_instance is None:
+        try:
+            import chromadb
+            chroma_client_instance = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_data"))
+        except Exception as e:
+            print(f"Warning: Could not initialize ChromaDB client: {e}")
+    return chroma_client_instance
 
 def get_cross_encoder():
     global cross_encoder_model
@@ -30,24 +40,37 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 BASE_DIR = Path(__file__).resolve().parent
 
 # --- Global Loaders ---
-collection = None
 def get_chroma_collection():
     global collection
     if collection is None:
         try:
+            from chromadb.utils import embedding_functions
+            from config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, EMBEDDING_MODEL
+            
             ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
-            chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_data"))
-            collection = chroma_client.get_collection(name=CHROMA_COLLECTION_NAME, embedding_function=ef)
+            client = get_chroma_client()
+            if client:
+                try:
+                    collection = client.get_collection(name=CHROMA_COLLECTION_NAME, embedding_function=ef)
+                except:
+                    # Collection doesn't exist yet - create it
+                    collection = client.create_collection(name=CHROMA_COLLECTION_NAME, embedding_function=ef)
+                    print(f"Created ChromaDB collection: {CHROMA_COLLECTION_NAME}")
         except Exception as e:
             print(f"Warning: Could not load ChromaDB: {e}")
+            collection = None
     return collection
 
-ranker_model = xgb.XGBClassifier()
-try:
-    # Load the V2 model we just trained
-    ranker_model.load_model(str(BASE_DIR.parent / "train" / "xgboost_ranker_v2.json"))
-except Exception as e:
-    print(f"Warning: Could not load XGBoost Ranker: {e}")
+def get_ranker_model():
+    global ranker_model
+    if ranker_model is None:
+        try:
+            ranker_model = xgb.XGBClassifier()
+            ranker_model.load_model(str(BASE_DIR.parent / "train" / "xgboost_ranker_v2.json"))
+        except Exception as e:
+            print(f"Warning: Could not load XGBoost Ranker: {e}")
+            ranker_model = None
+    return ranker_model
 
 # --- Helper Functions ---
 def clean_json_response(raw_text):
@@ -251,7 +274,12 @@ def fetch_practice_problem(user_profile: dict):
                 df_scoring = df_scoring[ordered_features]
                 
                 # Predict probability of success (y=1)
-                probabilities = ranker_model.predict_proba(df_scoring)[:, 1]
+                model = get_ranker_model()
+                if model:
+                    probabilities = model.predict_proba(df_scoring)[:, 1]
+                else:
+                    # Fallback: use random scores if model not available
+                    probabilities = [0.5] * len(fresh_candidates)
                 
                 for i in range(len(fresh_candidates)):
                     fresh_candidates[i]["xgb_score"] = float(probabilities[i])
