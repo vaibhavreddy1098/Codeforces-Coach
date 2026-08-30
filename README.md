@@ -164,4 +164,3 @@ The API will be available at `http://<your-machine-ip>:8000`. Access the Swagger
 - **Frontend:** HTML/CSS/JS (Vanilla + KaTeX for math rendering)
 
 ---
-*Built for educational purposes.*
