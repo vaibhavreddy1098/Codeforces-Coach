@@ -151,7 +151,7 @@ EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
-Open [http://localhost:8000](http://localhost:8000) in your browser!
+The API will be available at `http://<your-machine-ip>:8000`. Access the Swagger docs at `/docs` endpoint.
 
 ---
 
