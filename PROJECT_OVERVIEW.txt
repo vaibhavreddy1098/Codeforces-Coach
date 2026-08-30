@@ -1,0 +1,4 @@
+﻿Project name: Codeforces Coach
+Status: active development
+Primary purpose: AI-assisted Codeforces training and debugging
+Type: Python + FastAPI + ML + vector retrieval
