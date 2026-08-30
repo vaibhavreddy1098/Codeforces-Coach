@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -12,9 +12,9 @@
 </head>
 <body>
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <!-- AUTH SCREEN                                                     -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div id="auth-screen" class="auth-screen">
         <div class="auth-bg">
             <div class="auth-gradient"></div>
@@ -107,9 +107,9 @@
         </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <!-- MAIN APP                                                       -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div id="main-app" class="hidden">
         <header class="app-header glass-panel">
             <div class="logo">Codeforces <span class="highlight">Coach</span></div>
@@ -124,7 +124,7 @@
                 <div class="active-handle">
                     <span class="handle-badge">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        <span id="top-handle-display">—</span>
+                        <span id="top-handle-display">â€”</span>
                     </span>
                 </div>
                 <button class="logout-btn" id="logout-btn" title="Logout">
@@ -134,7 +134,7 @@
         </header>
 
         <main class="container">
-            <!-- ───────── PRACTICE TAB ───────── -->
+            <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€ PRACTICE TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section id="tab-problem" class="tab-view active fade-in">
                 <div class="hero">
                     <div class="glow-orb"></div>
@@ -145,18 +145,18 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                             Generate Problem
                         </span>
-                        <span class="icon">➔</span>
+                        <span class="icon">âž”</span>
                     </button>
                     <div id="gp-loading" class="hidden loading-state">
                         <div class="spinner"></div>
                         <p>Analyzing profile & ranking problems with XGBoost...</p>
                         <div class="pipeline-steps">
                             <span class="step active" id="step-ml">ML Profile</span>
-                            <span class="step-arrow">→</span>
+                            <span class="step-arrow">â†’</span>
                             <span class="step" id="step-retrieve">Retrieval</span>
-                            <span class="step-arrow">→</span>
+                            <span class="step-arrow">â†’</span>
                             <span class="step" id="step-rank">Ranking</span>
-                            <span class="step-arrow">→</span>
+                            <span class="step-arrow">â†’</span>
                             <span class="step" id="step-present">Presentation</span>
                         </div>
                     </div>
@@ -167,11 +167,11 @@
                 <div id="gp-result-area" class="hidden fade-in delay-1"></div>
             </section>
 
-            <!-- ───────── HISTORY TAB ───────── -->
+            <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€ HISTORY TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section id="tab-history" class="tab-view hidden fade-in">
                 <div class="history-header">
                     <h2>Problem <span class="highlight">History</span></h2>
-                    <p class="history-subtitle">Your training log — track what you've practiced and mark completed problems.</p>
+                    <p class="history-subtitle">Your training log â€” track what you've practiced and mark completed problems.</p>
                     <div class="history-stats" id="history-stats"></div>
                 </div>
                 <div id="history-list" class="history-list"></div>
@@ -191,7 +191,7 @@
                 </div>
             </section>
 
-            <!-- ───────── LEADERBOARD TAB ───────── -->
+            <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€ LEADERBOARD TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section id="tab-leaderboard" class="tab-view hidden fade-in">
                 <div class="lb-wrapper">
                     <div class="lb-header">
@@ -203,7 +203,7 @@
                             </div>
                             <div>
                                 <h2>Leader<span class="highlight">board</span></h2>
-                                <p class="lb-subtitle">Ranked by AI-recommended problems solved · <code>score = avg_rating × log₂(n+1)</code></p>
+                                <p class="lb-subtitle">Ranked by AI-recommended problems solved Â· <code>score = avg_rating Ã— logâ‚‚(n+1)</code></p>
                             </div>
                         </div>
                         <div class="lb-search-wrap">
@@ -242,7 +242,7 @@
                 </div>
             </section>
 
-            <!-- ───────── ANALYTICS TAB ───────── -->
+            <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€ ANALYTICS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section id="tab-profile" class="tab-view hidden fade-in">
                  <div id="profile-setup" class="setup-notice fade-in">
                      <div class="glow-orb"></div>
@@ -269,8 +269,8 @@
                             <div class="stat-box"><span class="label">Abandonment</span><span class="value" id="profile-abandonment"></span></div>
                         </div>
                         <div class="domains">
-                            <div class="domain-box"><span class="label text-green">💪 Strengths</span><p id="profile-strengths"></p></div>
-                            <div class="domain-box"><span class="label text-red">⚠️ Weaknesses</span><p id="profile-weakness"></p></div>
+                            <div class="domain-box"><span class="label text-green">ðŸ’ª Strengths</span><p id="profile-strengths"></p></div>
+                            <div class="domain-box"><span class="label text-red">âš ï¸ Weaknesses</span><p id="profile-weakness"></p></div>
                         </div>
                     </aside>
                  </div>
@@ -314,3 +314,7 @@
     <script src="app.js"></script>
 </body>
 </html>
+
+
+<!-- Frontend UI for Codeforces Coach -->
+
