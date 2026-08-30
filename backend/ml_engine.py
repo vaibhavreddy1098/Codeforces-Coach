@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 import requests
 import joblib
 from pathlib import Path
@@ -144,3 +144,6 @@ def analyze_user_profile(handle: str):
         "metrics": features,
         "attempted_problems": attempted_problems 
     }
+
+# ML profiling layer for persona analysis
+
