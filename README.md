@@ -1,10 +1,10 @@
-# 🏋️ Codeforces Coach — Advanced AI Training Platform
+# Codeforces Coach — Advanced AI Training Platform
 
 An intelligent competitive programming training system. It goes beyond simple problem recommendations by providing **Self-Querying Semantic Search**, **ML-driven Behavioral Profiling**, and a **LangGraph-powered Autonomous Socratic Debugger** to act as your personal Codeforces mentor.
 
 ---
 
-## ✨ Core Features
+## Core Features
 
 | Feature | Description |
 |---|---|
@@ -17,7 +17,7 @@ An intelligent competitive programming training system. It goes beyond simple pr
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### 1. Overall Platform Data Flow
 ```mermaid
@@ -78,7 +78,7 @@ stateDiagram-v2
 
 ---
 
-## 📊 Behavioral Archetypes (GMM Clusters)
+## Behavioral Archetypes (GMM Clusters)
 
 | # | Name | Rating Range | Key Trait |
 |---|------|-------------|-----------|
@@ -95,7 +95,7 @@ stateDiagram-v2
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 cf_coach/
@@ -117,7 +117,7 @@ cf_coach/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.10+
@@ -155,7 +155,7 @@ Open [http://localhost:8000](http://localhost:8000) in your browser!
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 - **Backend:** FastAPI, Uvicorn, SQLAlchemy
 - **Agentic Workflow:** LangGraph, LangChain
 - **Vector DB / RAG:** ChromaDB, SentenceTransformers (Bi-Encoder), HuggingFace (Cross-Encoder)
