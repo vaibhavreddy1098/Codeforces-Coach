@@ -11,6 +11,7 @@ from chat_engine import fetch_practice_problem, get_socratic_hint, debug_user_co
 from models import SessionLocal, User, ProblemHistory, init_db
 from auth import hash_password, verify_password, create_session, get_current_user, clear_session
 from sqlalchemy import func as sa_func
+from config import CF_PROFILE_HANDLE, CF_PROFILE_NAME, CF_PROFILE_URL
 
 app = FastAPI(title="CF Coach API")
 
@@ -31,9 +32,9 @@ def startup_event():
     try:
         init_db()
         _db_initialized = True
-        print("✅ Database initialized successfully")
+        print("Database initialized successfully")
     except Exception as e:
-        print(f"⚠️ Database initialization warning: {e}")
+        print(f"Database initialization warning: {e}")
         # Continue anyway - tables might already exist or DB may be initialized on first use
 
 
@@ -64,6 +65,22 @@ class SearchRequest(BaseModel):
     query: str
 
 
+def _current_user(request: Request) -> dict | None:
+    user = get_current_user(request)
+    if user and user.get("handle", "").casefold() == CF_PROFILE_HANDLE.casefold():
+        return user
+    return None
+
+
+@app.get("/api/config")
+def app_config():
+    return {
+        "cf_handle": CF_PROFILE_HANDLE,
+        "profile_name": CF_PROFILE_NAME,
+        "profile_url": CF_PROFILE_URL,
+    }
+
+
 # ── Auth endpoints ───────────────────────────────────────────────────
 
 @app.post("/api/register")
@@ -73,8 +90,14 @@ def register(req: RegisterRequest, response: Response):
 
     if not cf_handle or not password:
         raise HTTPException(status_code=400, detail="Handle and password are required.")
+    if cf_handle.casefold() != CF_PROFILE_HANDLE.casefold():
+        raise HTTPException(
+            status_code=403,
+            detail=f"This instance is configured for the Codeforces profile '{CF_PROFILE_HANDLE}'.",
+        )
     if len(password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters.")
+    cf_handle = CF_PROFILE_HANDLE
 
     db = SessionLocal()
     try:
@@ -100,10 +123,15 @@ def login(req: LoginRequest, response: Response):
 
     if not cf_handle or not password:
         raise HTTPException(status_code=400, detail="Handle and password are required.")
+    if cf_handle.casefold() != CF_PROFILE_HANDLE.casefold():
+        raise HTTPException(
+            status_code=403,
+            detail=f"This instance is configured for the Codeforces profile '{CF_PROFILE_HANDLE}'.",
+        )
 
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.cf_handle == cf_handle).first()
+        user = db.query(User).filter(User.cf_handle == CF_PROFILE_HANDLE).first()
         if not user or not verify_password(password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid handle or password.")
 
@@ -121,7 +149,7 @@ def logout(response: Response):
 
 @app.get("/api/me")
 def me(request: Request):
-    user = get_current_user(request)
+    user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     return {"cf_handle": user["handle"]}
@@ -130,18 +158,22 @@ def me(request: Request):
 # ── Core endpoints (now session-aware) ───────────────────────────────
 
 def _resolve_handle(req: ProfileRequest, request: Request) -> str:
-    """Return the handle from request body or fall back to session."""
+    """Resolve requests only to the configured Codeforces profile."""
+    user = _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
     if req.handle and req.handle.strip():
-        return req.handle.strip()
-    user = get_current_user(request)
-    if user:
-        return user["handle"]
-    raise HTTPException(status_code=401, detail="Please log in or provide a handle.")
+        if req.handle.strip().casefold() != CF_PROFILE_HANDLE.casefold():
+            raise HTTPException(
+                status_code=403,
+                detail=f"This instance is configured for the Codeforces profile '{CF_PROFILE_HANDLE}'.",
+            )
+    return CF_PROFILE_HANDLE
 
 
 def _get_user_id(request: Request) -> int:
     """Return the user ID from session or raise."""
-    user = get_current_user(request)
+    user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     return user["uid"]
@@ -193,8 +225,11 @@ def get_problem(req: ProfileRequest, request: Request):
             db.add(entry)
             db.commit()
         except Exception as e:
-            print(f"[!] Failed to save history: {e}")
             db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not save the recommended problem to your history: {e}",
+            ) from e
         finally:
             db.close()
 
@@ -206,7 +241,7 @@ def get_problem(req: ProfileRequest, request: Request):
 
 @app.post("/api/hint")
 def api_hint(req: HintRequest, request: Request):
-    user = get_current_user(request)
+    user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     res = get_socratic_hint(req.problem_id)
@@ -216,7 +251,7 @@ def api_hint(req: HintRequest, request: Request):
 
 @app.post("/api/debug_code")
 def api_debug_code(req: DebugRequest, request: Request):
-    user = get_current_user(request)
+    user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     res = debug_user_code(req.problem_id, req.code)
@@ -226,7 +261,7 @@ def api_debug_code(req: DebugRequest, request: Request):
 
 @app.post("/api/search_problems")
 def api_search_problems(req: SearchRequest, request: Request):
-    user = get_current_user(request)
+    user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     res = semantic_problem_search(req.query)
@@ -313,77 +348,50 @@ def get_leaderboard(request: Request, search: Optional[str] = None):
     Ranking formula: avg_rating_of_completed_problems * log2(n + 1)
     where n = number of completed AI-recommended problems.
     """
+    _get_user_id(request)
     db = SessionLocal()
     try:
-        # Get aggregated stats for ALL users who have completed at least 1 problem
-        rows = (
-            db.query(
-                User.id,
-                User.cf_handle,
-                sa_func.avg(ProblemHistory.rating).label("avg_rating"),
-                sa_func.count(ProblemHistory.id).label("total_solves"),
-            )
-            .join(ProblemHistory, ProblemHistory.user_id == User.id)
-            .filter(
-                ProblemHistory.is_completed == True,
-                ProblemHistory.rating.isnot(None),
-            )
-            .group_by(User.id, User.cf_handle)
-            .all()
-        )
-
-        # Compute scores in Python (log2 not available in all SQL dialects easily)
         leaderboard = []
-        for row in rows:
-            avg_r = float(row.avg_rating or 0)
-            n = int(row.total_solves or 0)
+        profile_user = (
+            db.query(User)
+            .filter(User.cf_handle == CF_PROFILE_HANDLE)
+            .first()
+        )
+        if profile_user:
+            stats = (
+                db.query(
+                    sa_func.avg(ProblemHistory.rating),
+                    sa_func.count(ProblemHistory.id),
+                )
+                .filter(
+                    ProblemHistory.user_id == profile_user.id,
+                    ProblemHistory.is_completed.is_(True),
+                    ProblemHistory.rating.isnot(None),
+                )
+                .first()
+            )
+            avg_r = float(stats[0] or 0)
+            n = int(stats[1] or 0)
             score = avg_r * math.log2(n + 1) if n > 0 else 0
             leaderboard.append({
-                "user_id": row.id,
-                "cf_handle": row.cf_handle,
+                "user_id": profile_user.id,
+                "cf_handle": CF_PROFILE_HANDLE,
                 "avg_rating": round(avg_r, 1),
                 "total_solves": n,
                 "score": round(score, 1),
+                "rank": 1,
             })
 
-        # Sort by score descending
-        leaderboard.sort(key=lambda x: x["score"], reverse=True)
-
-        # Assign ranks
-        for i, entry in enumerate(leaderboard):
-            entry["rank"] = i + 1
-
-        # Also include users with 0 completed problems (append at bottom)
-        ranked_ids = {e["user_id"] for e in leaderboard}
-        all_users = db.query(User.id, User.cf_handle).all()
-        for u in all_users:
-            if u.id not in ranked_ids:
-                leaderboard.append({
-                    "user_id": u.id,
-                    "cf_handle": u.cf_handle,
-                    "avg_rating": 0,
-                    "total_solves": 0,
-                    "score": 0,
-                    "rank": len(leaderboard) + 1,
-                })
-
-        # Search filter (applied after ranking so ranks stay global)
         if search and search.strip():
             q = search.strip().lower()
             leaderboard = [e for e in leaderboard if q in e["cf_handle"].lower()]
 
-        # Get current user's rank
-        current_user = get_current_user(request)
-        my_rank = None
-        if current_user:
-            for entry in leaderboard:
-                if entry["cf_handle"] == current_user["handle"]:
-                    my_rank = entry["rank"]
-                    break
+        current_user = _current_user(request)
+        my_rank = 1 if current_user and profile_user else None
 
         return {
             "leaderboard": leaderboard,
-            "total_users": len(all_users),
+            "total_users": 1 if profile_user else 0,
             "my_rank": my_rank,
             "my_handle": current_user["handle"] if current_user else None,
         }

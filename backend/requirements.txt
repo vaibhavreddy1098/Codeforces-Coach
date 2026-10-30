@@ -8,9 +8,9 @@ requests
 pandas
 joblib
 scikit-learn
+xgboost
 google-genai
 chromadb
-sentence-transformers
 passlib[bcrypt]
 bcrypt
 itsdangerous

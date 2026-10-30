@@ -9,29 +9,23 @@ from pathlib import Path
 from models import SessionLocal, ProblemEditorial
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
+from config import CHROMA_COLLECTION_NAME, CHROMA_PERSIST_DIR
+from embeddings import embed_texts
 
 # Defer expensive imports
-cross_encoder_model = None
 collection = None
 chroma_client_instance = None
+ranker_model = None
 
 def get_chroma_client():
     global chroma_client_instance
     if chroma_client_instance is None:
         try:
             import chromadb
-            chroma_client_instance = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_data"))
-        except Exception as e:
-            print(f"Warning: Could not initialize ChromaDB client: {e}")
+        except ImportError as e:
+            raise RuntimeError("ChromaDB is required. Install backend/requirements.txt.") from e
+        chroma_client_instance = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
     return chroma_client_instance
-
-def get_cross_encoder():
-    global cross_encoder_model
-    if cross_encoder_model is None:
-        from sentence_transformers import CrossEncoder
-        print("Loading CrossEncoder model...")
-        cross_encoder_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-    return cross_encoder_model
 
 # Suppress warnings
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -43,22 +37,10 @@ BASE_DIR = Path(__file__).resolve().parent
 def get_chroma_collection():
     global collection
     if collection is None:
-        try:
-            from chromadb.utils import embedding_functions
-            from config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, EMBEDDING_MODEL
-            
-            ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
-            client = get_chroma_client()
-            if client:
-                try:
-                    collection = client.get_collection(name=CHROMA_COLLECTION_NAME, embedding_function=ef)
-                except:
-                    # Collection doesn't exist yet - create it
-                    collection = client.create_collection(name=CHROMA_COLLECTION_NAME, embedding_function=ef)
-                    print(f"Created ChromaDB collection: {CHROMA_COLLECTION_NAME}")
-        except Exception as e:
-            print(f"Warning: Could not load ChromaDB: {e}")
-            collection = None
+        collection = get_chroma_client().get_or_create_collection(
+            name=CHROMA_COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
+        )
     return collection
 
 def get_ranker_model():
@@ -122,8 +104,8 @@ def fetch_practice_problem(user_profile: dict):
     
     api_key_1 = os.getenv("GEMINI_API_KEY")
     api_key_2 = os.getenv("GEMINI_API_KEY_2", api_key_1)  # Falls back to key 1 if not set
-    client_query = genai.Client(api_key=api_key_1)
-    client_present = genai.Client(api_key=api_key_2)
+    client_query = genai.Client(api_key=api_key_1) if api_key_1 else None
+    client_present = genai.Client(api_key=api_key_2) if api_key_2 else None
     
     system_prompt = user_profile.get("system_prompt", "You are an AI competitive programming coach.")
     question_rating = get_target_rating(user_profile)
@@ -144,6 +126,8 @@ def fetch_practice_problem(user_profile: dict):
     """
     
     try:
+        if client_query is None:
+            raise RuntimeError("GEMINI_API_KEY is not configured.")
         router_res = safe_gemini_call(
             client=client_query,
             model='gemini-3.1-flash-lite-preview',
@@ -167,6 +151,14 @@ def fetch_practice_problem(user_profile: dict):
     max_rating = int(parsed_intent.get("max_rating", question_rating + 200))
     
     col = get_chroma_collection()
+    if col.count() == 0:
+        return {
+            "error": (
+                "The local Codeforces problem index is empty. Run "
+                "`python pipeline.py --step 1`, `--step 2`, and `--step 3` "
+                "from the backend directory."
+            )
+        }
     context_str = ""
     problem_details = None
     
@@ -174,7 +166,7 @@ def fetch_practice_problem(user_profile: dict):
         try:
             # Over-fetch 150 problems to give XGBoost plenty of options and ensure we find one with an editorial
             results = col.query(
-                query_texts=[search_query],
+                query_embeddings=embed_texts([search_query]),
                 n_results=150, 
                 where={"$and": [{"rating": {"$gte": min_rating}}, {"rating": {"$lte": max_rating}}]}
             )
@@ -278,8 +270,17 @@ def fetch_practice_problem(user_profile: dict):
                 if model:
                     probabilities = model.predict_proba(df_scoring)[:, 1]
                 else:
-                    # Fallback: use random scores if model not available
-                    probabilities = [0.5] * len(fresh_candidates)
+                    rating_span = max(
+                        1,
+                        question_rating + 200 - max(800, question_rating - 100),
+                    )
+                    probabilities = [
+                        1 - min(
+                            1,
+                            abs(int(candidate.get("rating", 0)) - question_rating) / rating_span,
+                        )
+                        for candidate in fresh_candidates
+                    ]
                 
                 for i in range(len(fresh_candidates)):
                     fresh_candidates[i]["xgb_score"] = float(probabilities[i])
@@ -316,6 +317,12 @@ def fetch_practice_problem(user_profile: dict):
     Do not give them the solution. Be concise and format nicely with markdown.
     """
     
+    if client_present is None:
+        return {
+            "message": f"**Recommended for your current profile**\n\n{context_str}",
+            "problem_details": problem_details,
+        }
+
     try:
         final_response = safe_gemini_call(
             client=client_present,
@@ -351,6 +358,8 @@ def get_socratic_hint(problem_id: str, current_prompt: str = ""):
     """
 
     api_key_1 = os.getenv("GEMINI_API_KEY")
+    if not api_key_1:
+        return {"error": "GEMINI_API_KEY is required to generate hints."}
     client_present = genai.Client(api_key=api_key_1)
 
     try:
@@ -385,6 +394,8 @@ def critic_node(state: DebugState):
     Output a highly technical bug report. DO NOT talk to the user.
     """
     api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is required to analyze code.")
     client = genai.Client(api_key=api_key)
     res = safe_gemini_call(client=client, model='gemini-3.1-flash-lite-preview', contents=prompt)
     return {"bug_report": res.text}
@@ -403,6 +414,8 @@ def coach_node(state: DebugState):
         prompt += "\nWARNING: Your previous response contained actual solution code. You MUST remove all solution code and only give hints."
         
     api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is required to coach code.")
     client = genai.Client(api_key=api_key)
     res = safe_gemini_call(client=client, model='gemini-3.1-flash-lite-preview', contents=prompt)
     return {"draft_response": res.text, "loop_count": state.get("loop_count", 0) + 1}
@@ -418,6 +431,8 @@ def reviewer_node(state: DebugState):
     Reply strictly with "SAFE" if it's just hints, or "UNSAFE" if it contains solution code blocks.
     """
     api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is required to review code.")
     client = genai.Client(api_key=api_key)
     res = safe_gemini_call(client=client, model='gemini-3.1-flash-lite-preview', contents=prompt)
     is_safe = "UNSAFE" not in res.text.upper()
@@ -494,6 +509,13 @@ def parse_search_query(query: str):
     """
 
     api_key_1 = os.getenv("GEMINI_API_KEY")
+    if not api_key_1:
+        return {
+            "semantic_query": query,
+            "max_rating": None,
+            "min_rating": None,
+            "required_tags": [],
+        }
     client_present = genai.Client(api_key=api_key_1)
     
     try:
@@ -512,28 +534,46 @@ def parse_search_query(query: str):
 
 
 def semantic_problem_search(query: str, top_k: int = 3):
-    """Self-Querying Retriever: LLM Parsing -> Bi-Encoder (recall) -> Post-Filtering -> Cross-Encoder (precision)."""
+    """Search local vector indexes, apply metadata filters, and rank by vector distance."""
     # 1. LLM Query Parsing
     parsed_query = parse_search_query(query)
     semantic_query = parsed_query.get("semantic_query", query)
     max_rating = parsed_query.get("max_rating")
     min_rating = parsed_query.get("min_rating")
     required_tags = parsed_query.get("required_tags", [])
-    client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+    client = get_chroma_client()
     
-    # Stage 1: Get top 50 from cf_editorials (High Recall)
+    # Prefer editorial embeddings; fall back to the problem index if editorials
+    # have not been ingested yet.
     try:
         col_ed = client.get_collection(name="cf_editorials")
+        results = col_ed.query(
+            query_embeddings=embed_texts([semantic_query]),
+            n_results=50,
+        )
     except Exception:
-        return {"error": "cf_editorials collection not found. Please run pipeline.py --step 4 first."}
-        
-    results = col_ed.query(query_texts=[semantic_query], n_results=50)
+        try:
+            col_prob = client.get_collection(name=CHROMA_COLLECTION_NAME)
+        except Exception:
+            return {
+                "error": (
+                    "The Codeforces problem index is missing. Run "
+                    "`python pipeline.py --step 1`, `--step 2`, and `--step 3`."
+                )
+            }
+        if col_prob.count() == 0:
+            return {"error": "The Codeforces problem index is empty. Run pipeline steps 1-3."}
+        results = col_prob.query(
+            query_embeddings=embed_texts([semantic_query]),
+            n_results=min(50, col_prob.count()),
+        )
     
     if not results['ids'] or len(results['ids'][0]) == 0:
         return {"error": "No problems found matching the query."}
         
     pids = results['ids'][0]
     docs = results['documents'][0]
+    distances = results.get("distances", [[]])[0]
     
     # Stage 1.5: Fetch metadata & Post-Filtering
     try:
@@ -544,6 +584,7 @@ def semantic_problem_search(query: str, top_k: int = 3):
         
     filtered_pids = []
     filtered_docs = []
+    filtered_distances = []
     
     for i, pid in enumerate(pids):
         try:
@@ -570,23 +611,21 @@ def semantic_problem_search(query: str, top_k: int = 3):
                     
             filtered_pids.append(pid)
             filtered_docs.append(docs[i])
+            filtered_distances.append(float(distances[i]) if distances else float(i))
         except ValueError:
             pass # PID not in cf_problems
             
     if not filtered_pids:
         return {"error": "No problems found matching your constraints (e.g. rating limits)."}
         
-    # Limit to top 15 remaining for Cross-Encoder speed
+    # Keep the closest vector matches and use their distances as relevance scores.
     filtered_pids = filtered_pids[:15]
     filtered_docs = filtered_docs[:15]
-    
-    # Stage 2: Cross-Encoder Re-ranking
-    ce = get_cross_encoder()
-    pairs = [[query, doc] for doc in filtered_docs] # Evaluate against the original query
-    scores = ce.predict(pairs)
-    
-    # Sort by score descending
-    scored_results = sorted(zip(scores, filtered_pids, filtered_docs), key=lambda x: x[0], reverse=True)
+    filtered_distances = filtered_distances[:15]
+    scored_results = sorted(
+        zip(filtered_distances, filtered_pids, filtered_docs),
+        key=lambda item: item[0],
+    )
     
     # Take top_k
     top_results = scored_results[:top_k]
@@ -612,7 +651,7 @@ def semantic_problem_search(query: str, top_k: int = 3):
                 "tags": meta.get("tags", ""),
                 "contest_id": meta.get("contest_id"),
                 "index": meta.get("index"),
-                "ce_score": float(scored_results[top_pids.index(pid)][0])
+                "relevance_score": 1 / (1 + max(scored_results[top_pids.index(pid)][0], 0))
             })
         except ValueError:
             pass

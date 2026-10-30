@@ -119,14 +119,32 @@ def analyze_user_profile(handle: str):
     ]
     x_df = pd.DataFrame([features])[ordered_cols]
     
-    if scaler is None or gmm_model is None:
-        return {"error": "ML Models not loaded on backend."}
-
-    x_scaled = scaler.transform(x_df)
-    
-    probabilities = gmm_model.predict_proba(x_scaled)[0]
-    cluster = int(probabilities.argmax())
-    top_probability = float(probabilities[cluster])
+    profile_source = "trained_model"
+    if scaler is not None and gmm_model is not None:
+        x_scaled = scaler.transform(x_df)
+        probabilities = gmm_model.predict_proba(x_scaled)[0]
+        cluster = int(probabilities.argmax())
+        top_probability = float(probabilities[cluster])
+    else:
+        rating_centers = {
+            0: 1090,
+            1: 1170,
+            2: 970,
+            3: 1560,
+            4: 1665,
+            5: 880,
+            6: 1190,
+            7: 1420,
+            8: 1560,
+            9: 980,
+        }
+        reference_rating = avg_solved_rating or current_rating or 1200
+        cluster = min(
+            rating_centers,
+            key=lambda candidate: abs(rating_centers[candidate] - reference_rating),
+        )
+        top_probability = None
+        profile_source = "rating_fallback"
     
     persona_info = PERSONA_MAP.get(cluster, PERSONA_MAP[0])
 
@@ -137,6 +155,7 @@ def analyze_user_profile(handle: str):
         "handle": handle,
         "cluster": cluster,
         "cluster_probability": top_probability,
+        "profile_source": profile_source,
         "persona_name": persona_info["name"],
         "system_prompt": persona_info["system_prompt"],
         "avg_rating": avg_solved_rating,

@@ -122,6 +122,18 @@ document.addEventListener('DOMContentLoaded', () => {
         topHandleDisp.textContent = handle;
     }
 
+    async function loadAppConfig() {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        if (!res.ok) throw new Error(config.detail || 'Failed to load app configuration.');
+        document.getElementById('login-handle').value = config.cf_handle;
+        document.getElementById('register-handle').value = config.cf_handle;
+        const profileLink = document.getElementById('cf-profile-link');
+        profileLink.href = config.profile_url;
+        profileLink.textContent = config.profile_name;
+    }
+
+    loadAppConfig().catch(err => showToast(err.message, 'error'));
     checkSession();
 
 
@@ -497,6 +509,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════════════
     function renderProfile(data) {
         document.getElementById('profile-handle-title').textContent = data.handle;
+        document.getElementById('profile-mode').textContent =
+            data.profile_source === 'rating_fallback' ? 'Rating-based estimate' : 'ML archetype';
         document.getElementById('profile-cluster').textContent = data.cluster;
         const p = data.metrics || {};
         document.getElementById('profile-rating').textContent = data.avg_rating ? Math.round(data.avg_rating) : 'N/A';
@@ -662,17 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════════════
     // LEADERBOARD TAB
     // ═══════════════════════════════════════════════════════════════
-    let lbDebounce = null;
-    const lbSearch = document.getElementById('lb-search');
-
-    if (lbSearch) {
-        lbSearch.addEventListener('input', () => {
-            clearTimeout(lbDebounce);
-            lbDebounce = setTimeout(() => loadLeaderboard(lbSearch.value), 300);
-        });
-    }
-
-    async function loadLeaderboard(search = '') {
+    async function loadLeaderboard() {
         const podium   = document.getElementById('lb-podium');
         const tbody    = document.getElementById('lb-tbody');
         const myRankEl = document.getElementById('lb-my-rank');
@@ -684,10 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tableWrap.classList.remove('hidden');
 
         try {
-            const url = search.trim()
-                ? `/api/leaderboard?search=${encodeURIComponent(search.trim())}`
-                : '/api/leaderboard';
-            const res = await fetch(url, { credentials: 'include' });
+            const res = await fetch('/api/leaderboard', { credentials: 'include' });
             if (!res.ok) throw new Error('Failed to load leaderboard.');
             const data = await res.json();
 
@@ -726,7 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Podium (only top 3 with score > 0, only when not searching)
             const top3 = lb.filter(e => e.score > 0).slice(0, 3);
-            if (top3.length >= 1 && !search.trim()) {
+            if (top3.length >= 1) {
                 const medals = ['🥇', '🥈', '🥉'];
                 const classes = ['podium-gold', 'podium-silver', 'podium-bronze'];
                 // Show in order: 2nd, 1st, 3rd for visual podium effect

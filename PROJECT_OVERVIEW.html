@@ -495,7 +495,7 @@
             <tr>
                 <td><strong>2. Data Ingestion & Vector Storage</strong></td>
                 <td><span class="tag tag-cyan">Phase 1</span></td>
-                <td>Codeforces API, PostgreSQL, ChromaDB</td>
+                <td>Codeforces API, SQLite/PostgreSQL, ChromaDB</td>
             </tr>
             <tr>
                 <td><strong>3. Psychological Profiling</strong></td>
@@ -634,8 +634,8 @@
             <li><strong>solved_count</strong> — Global number of successful submissions</li>
         </ul>
 
-        <h4>PostgreSQL Storage</h4>
-        <p>All problems are upserted into a PostgreSQL database via SQLAlchemy models. The pipeline then generates a <strong>natural-language description</strong> for each problem using template-based text generation. Example:</p>
+        <h4>SQLAlchemy Storage</h4>
+        <p>All problems are upserted into the configured SQLite or PostgreSQL database via SQLAlchemy models. The pipeline then generates a <strong>natural-language description</strong> for each problem using template-based text generation. Example:</p>
         <div class="code-block">
 <span class="string">"The problem 'Watermelon' (ID: 4A) is a beginner-friendly competitive
 programming challenge with an official difficulty rating of 800.
@@ -645,11 +645,11 @@ making it an excellent choice for practicing math, brute force logic."</span>
         </div>
 
         <h4>ChromaDB Vector Store</h4>
-        <p>These descriptions are embedded using <strong>SentenceTransformers</strong> (<code>all-MiniLM-L6-v2</code>) and stored in ChromaDB with HNSW cosine similarity indexing. This transforms the static problem database into a <strong>semantically searchable knowledge base</strong>.</p>
+        <p>These descriptions are converted to fixed-size local vectors with scikit-learn's <strong>HashingVectorizer</strong> and stored in ChromaDB with HNSW cosine similarity indexing. This enables searchable problem retrieval without downloading a separate embedding model.</p>
 
         <div class="callout callout-success">
             <div class="callout-label">Key Advantage</div>
-            By embedding rich descriptions rather than raw tags, the semantic search can understand conceptual queries like <em>"tree traversal with backtracking"</em> even if no problem has that exact tag combination.
+            Rich problem descriptions give local vector search more matching context than raw tags alone, while rating and tag constraints are applied as strict post-filters.
         </div>
     </div>
 </div>
@@ -920,8 +920,8 @@ nicely with markdown.
             <tr><td>Backend API</td><td>FastAPI + Uvicorn</td><td>HTTP server, request validation</td></tr>
             <tr><td>ML Pipeline</td><td>scikit-learn (GMM) + XGBoost</td><td>User clustering + problem ranking</td></tr>
             <tr><td>Data Processing</td><td>Pandas + NumPy</td><td>Feature engineering</td></tr>
-            <tr><td>Vector Database</td><td>ChromaDB + SentenceTransformers</td><td>Semantic retrieval (all-MiniLM-L6-v2)</td></tr>
-            <tr><td>Relational DB</td><td>PostgreSQL + SQLAlchemy</td><td>Problem storage & metadata</td></tr>
+            <tr><td>Vector Database</td><td>ChromaDB + scikit-learn HashingVectorizer</td><td>Local vector retrieval without model downloads</td></tr>
+            <tr><td>Relational DB</td><td>SQLite/PostgreSQL + SQLAlchemy</td><td>Problem storage & metadata</td></tr>
             <tr><td>LLM</td><td>Google Gemini 2.5 Flash</td><td>Query building + persona presentation</td></tr>
             <tr><td>Frontend</td><td>Vanilla HTML/CSS/JS</td><td>Two-tab glassmorphism interface</td></tr>
         </tbody>

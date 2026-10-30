@@ -196,6 +196,15 @@ body {
     font-weight: 400;
 }
 
+.brand-sub a {
+    color: var(--accent-light);
+    text-decoration: none;
+}
+
+.brand-sub a:hover {
+    text-decoration: underline;
+}
+
 /* Auth card */
 .auth-card {
     width: 100%;
@@ -1853,4 +1862,3 @@ body {
     .lb-table { font-size: 0.82rem; }
     .lb-table td, .lb-table thead th { padding: 0.5rem 0.6rem; }
 }
-

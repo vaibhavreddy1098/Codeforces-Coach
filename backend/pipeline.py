@@ -2,7 +2,7 @@
 Full data pipeline for CF Coach
 =================================
 Step 1 — Fetch problems + statistics from the Codeforces API
-Step 2 — Upsert every problem into PostgreSQL
+Step 2 — Upsert every problem into the configured SQLAlchemy database
 Step 3 — Generate a rich description text for each problem
 Step 4 — Embed the descriptions and store them in ChromaDB
 
@@ -25,19 +25,19 @@ from config import (
     CF_API_URL,
     CHROMA_PERSIST_DIR,
     CHROMA_COLLECTION_NAME,
-    EMBEDDING_MODEL,
 )
 from models import init_db, SessionLocal, Problem
+from embeddings import embed_texts
 
 
 # ─────────────────────────────────────────────────────────────────────
-# STEP 1 — Fetch from Codeforces API & store in PostgreSQL
+# STEP 1 — Fetch from Codeforces API & store in the configured database
 # ─────────────────────────────────────────────────────────────────────
 def fetch_and_store():
-    """Hit the CF API, merge problems + stats, and upsert into PostgreSQL."""
+    """Hit the CF API, merge problems + stats, and upsert into the configured database."""
 
     print("=" * 60)
-    print("STEP 1 · Fetching data from Codeforces API …")
+    print("STEP 1 - Fetching data from Codeforces API...")
     print("=" * 60)
 
     resp = requests.get(CF_API_URL, timeout=30)
@@ -45,14 +45,14 @@ def fetch_and_store():
     data = resp.json()
 
     if data.get("status") != "OK":
-        print(f"❌  API returned status: {data.get('status')}")
+        print(f"API returned status: {data.get('status')}")
         sys.exit(1)
 
     problems = data["result"]["problems"]
     stats = data["result"]["problemStatistics"]
 
-    print(f"   ▸ Problems returned : {len(problems)}")
-    print(f"   ▸ Statistics returned: {len(stats)}")
+    print(f"   Problems returned : {len(problems)}")
+    print(f"   Statistics returned: {len(stats)}")
 
     # Build a lookup  { "1555A": solved_count }
     stats_map: dict[str, int] = {}
@@ -68,6 +68,7 @@ def fetch_and_store():
         if cid is None or idx is None:
             continue
         pid = f"{cid}{idx}"
+        tags = p.get("tags") or []
         merged.append(
             {
                 "problem_id": pid,
@@ -75,15 +76,15 @@ def fetch_and_store():
                 "index": idx,
                 "name": p.get("name", ""),
                 "rating": p.get("rating"),
-                "tags": p.get("tags", []),
+                "tags": ",".join(tags) if isinstance(tags, list) else str(tags),
                 "solved_count": stats_map.get(pid),
             }
         )
 
-    print(f"   ▸ Merged records     : {len(merged)}")
+    print(f"   Merged records     : {len(merged)}")
 
-    # ── Upsert into PostgreSQL ────────────────────────────────────────
-    print("\n   ▸ Upserting into PostgreSQL …")
+    # Upsert into the configured database.
+    print("\n   Upserting into the database...")
     init_db()
 
     session = SessionLocal()
@@ -109,7 +110,7 @@ def fetch_and_store():
     finally:
         session.close()
 
-    print(f"   ✅ Inserted {inserted}, Updated {updated} problems.\n")
+    print(f"   Inserted {inserted}, updated {updated} problems.\n")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ def generate_texts():
     """Build a natural-language description for every problem and store it."""
 
     print("=" * 60)
-    print("STEP 2 · Generating description texts …")
+    print("STEP 2 - Generating description texts...")
     print("=" * 60)
 
     session = SessionLocal()
@@ -156,7 +157,7 @@ def generate_texts():
         problems: list[Problem] = session.query(Problem).all()
         count = 0
         for p in problems:
-            tags_str = ", ".join(p.tags) if p.tags else "general problem-solving"
+            tags_str = p.tags or "general problem-solving"
             diff = _difficulty_label(p.rating)
             pop = _popularity_label(p.solved_count)
             rating_str = f" with an official difficulty rating of {p.rating}" if p.rating else ""
@@ -176,7 +177,7 @@ def generate_texts():
             count += 1
 
         session.commit()
-        print(f"   ✅ Generated texts for {count} problems.\n")
+        print(f"   Generated texts for {count} problems.\n")
     except Exception:
         session.rollback()
         raise
@@ -188,24 +189,17 @@ def generate_texts():
 # STEP 3 — Embed descriptions and store in ChromaDB
 # ─────────────────────────────────────────────────────────────────────
 def embed_and_store():
-    """Read description texts from PostgreSQL, embed them, push to ChromaDB."""
+    """Read descriptions from the SQLAlchemy database and index them in ChromaDB."""
 
     print("=" * 60)
-    print("STEP 3 · Embedding descriptions into ChromaDB …")
+    print("STEP 3 - Embedding descriptions into ChromaDB...")
     print("=" * 60)
 
     import chromadb
-    from chromadb.utils import embedding_functions
-
-    # Use sentence-transformers embedding function (runs locally)
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBEDDING_MODEL
-    )
 
     client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
     collection = client.get_or_create_collection(
         name=CHROMA_COLLECTION_NAME,
-        embedding_function=ef,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -216,7 +210,7 @@ def embed_and_store():
             .filter(Problem.description_text.isnot(None))
             .all()
         )
-        print(f"   ▸ Problems with text: {len(problems)}")
+        print(f"   Problems with text: {len(problems)}")
 
         # ChromaDB upsert in batches of 500
         BATCH = 500
@@ -231,24 +225,30 @@ def embed_and_store():
             docs = [p.description_text for p in batch]
             metas = [
                 {
+                    "problem_id": p.problem_id,
                     "contest_id": p.contest_id,
                     "index": p.index,
                     "name": p.name,
                     "rating": p.rating or 0,
-                    "tags": ",".join(p.tags) if p.tags else "",
+                    "tags": p.tags or "",
                     "solved_count": p.solved_count or 0,
                 }
                 for p in batch
             ]
 
-            collection.upsert(ids=ids, documents=docs, metadatas=metas)
+            collection.upsert(
+                ids=ids,
+                documents=docs,
+                embeddings=embed_texts(docs),
+                metadatas=metas,
+            )
             print(
-                f"   ▸ Batch {batch_idx + 1}/{total_batches} "
+                f"   Batch {batch_idx + 1}/{total_batches} "
                 f"({len(batch)} problems) upserted."
             )
 
         total = collection.count()
-        print(f"   ✅ ChromaDB collection '{CHROMA_COLLECTION_NAME}' now has {total} documents.\n")
+        print(f"   ChromaDB collection '{CHROMA_COLLECTION_NAME}' now has {total} documents.\n")
 
     finally:
         session.close()
@@ -261,31 +261,28 @@ def ingest_hf_datasets():
     """Stream open-r1/codeforces to extract editorials."""
 
     print("=" * 60)
-    print("STEP 4 · Ingesting HuggingFace datasets …")
+    print("STEP 4 - Ingesting HuggingFace datasets...")
     print("=" * 60)
 
     try:
         from datasets import load_dataset
     except ImportError:
-        print("❌ Please install datasets: pip install datasets")
+        print("Please install datasets: pip install datasets")
         return
 
     import chromadb
-    from chromadb.utils import embedding_functions
     from models import ProblemEditorial
 
     init_db()
     session = SessionLocal()
 
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
     client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
     collection = client.get_or_create_collection(
         name="cf_editorials",
-        embedding_function=ef,
         metadata={"hnsw:space": "cosine"},
     )
 
-    print("   ▸ Streaming open-r1/codeforces (this will ingest the entire dataset, please wait...) ...")
+    print("   Streaming open-r1/codeforces (this will ingest the entire dataset, please wait)...")
     dataset = load_dataset('open-r1/codeforces', split='train', streaming=True)
 
     count = 0
@@ -316,19 +313,29 @@ def ingest_hf_datasets():
             count += 1
 
             if count % 100 == 0:
-                collection.upsert(ids=upsert_ids, documents=upsert_docs, metadatas=upsert_metas)
+                collection.upsert(
+                    ids=upsert_ids,
+                    documents=upsert_docs,
+                    embeddings=embed_texts(upsert_docs),
+                    metadatas=upsert_metas,
+                )
                 session.commit()
                 upsert_ids, upsert_docs, upsert_metas = [], [], []
-                print(f"   ▸ Processed {count} editorials...")
+                print(f"   Processed {count} editorials...")
 
         if upsert_ids:
-            collection.upsert(ids=upsert_ids, documents=upsert_docs, metadatas=upsert_metas)
+            collection.upsert(
+                ids=upsert_ids,
+                documents=upsert_docs,
+                embeddings=embed_texts(upsert_docs),
+                metadatas=upsert_metas,
+            )
             session.commit()
 
-        print(f"   ✅ Successfully ingested {count} editorials.\n")
+        print(f"   Successfully ingested {count} editorials.\n")
     except Exception as e:
         session.rollback()
-        print(f"❌ Error during ingestion: {e}")
+        print(f"Error during ingestion: {e}")
     finally:
         session.close()
 
@@ -359,7 +366,7 @@ def main():
         ingest_hf_datasets()
 
     elapsed = time.time() - t0
-    print(f"🏁 Pipeline finished in {elapsed:.1f}s")
+    print(f"Pipeline finished in {elapsed:.1f}s")
 
 
 if __name__ == "__main__":
